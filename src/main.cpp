@@ -52,6 +52,7 @@ void decode_motor_speeds(const String& input, int& SpeedL, int& SpeedR, int& Spe
     int posR = input.indexOf('R');
     int posA = input.indexOf('A');
 
+    //Parse the motor speeds from the received message
     if (posL != -1) {
         int nextL = input.substring(posL + 1).toInt();
         SpeedL = nextL;
@@ -153,15 +154,13 @@ void setup() {
   delay(7000);
 
   //Initialize BMP280 sensor
-  if (!bmp280.begin()) {
-      droneTemperature = -111.0; // Wartość błędu
+  if (!bmp280.begin(BMP280_ADDRESS_ALT)) { //If the sensor is not connected, try to change argument to "BMP280_ADDRESS"
+      droneTemperature = -50; //If initialization fails, set the temperature to -50
       return;
   }
 }
 
-
 void loop() {
-
   //Measure battery voltage
   measure_battery_voltage();
   //Measure temperature
@@ -173,6 +172,7 @@ void loop() {
     
   loop_counter++;
 
+  //If the drone is not connected to the remote for a long time set the motors to neutral position
   if (loop_counter > 10000) {
         MotorL.write(90);
         MotorR.write(90);
@@ -187,10 +187,10 @@ void loop() {
   if (Serial.available() > 0) {
     data = Serial.readStringUntil('\n');
 
-    // Drone recieved an "I am disarmed" command
+    //received disarm command ("d")
     if (data == "d") {
         
-        // Serial.print("Now, it's the moment's I would disarm IRL");    
+        //Set the motors to neutral position  
         MotorL.write(90);
         MotorR.write(90);
         MotorA.write(90);
@@ -203,7 +203,7 @@ void loop() {
 
         //Break out of a loop if any serial data is available.
         digitalWrite(SLAVE_EN, LOW);
-        delay(100);
+        //delay(100);
 
         if (Serial.available() > 0) {
           data = "L90R90A90";
@@ -224,5 +224,4 @@ void loop() {
   MotorL.write(SpeedL);
   MotorR.write(SpeedR);
   MotorA.write(SpeedA);
-  
 }
