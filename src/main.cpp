@@ -1,6 +1,7 @@
 #include <Servo.h>
 #include <Arduino.h>
 #include <Adafruit_BMP280.h>
+#include <SoftwareSerial.h>
 #include <Wire.h>
 
 //RS485 communication enable pin (HIGH for transmitting, LOW for receiving)
@@ -32,6 +33,8 @@
 
 //BMP280 object
 Adafruit_BMP280 bmp280;
+
+SoftwareSerial RS485Serial(AdditionalSensor1, AdditionalSensor3); // RX, TX
 
 //Servo objects
 Servo MotorL, MotorR, MotorA;
@@ -105,8 +108,8 @@ void send_measurement_data() {
     //Sending data via RS485
     digitalWrite(SLAVE_EN, HIGH);
     delay(100);
-    Serial.println(data);
-    Serial.flush();
+    RS485Serial.println(data);
+    RS485Serial.flush();
     digitalWrite(SLAVE_EN, LOW);
     delay(100);
 }
@@ -148,8 +151,9 @@ void setup() {
   digitalWrite(LED_RED, HIGH);
 
   //Set baud rate for serial communication
-  Serial.begin(115200);
+  RS485Serial.begin(9600);
 
+  
   //Wait once for initialization ESCs
   delay(7000);
 
@@ -168,7 +172,7 @@ void loop() {
 
   //Disconnect if not connected to remote for long enough:
   int loop_counter = 0;
-  while (!(Serial.available() > 0)) {
+  while (!(RS485Serial.available() > 0)) {
     
   loop_counter++;
 
@@ -184,8 +188,8 @@ void loop() {
   String data;
   digitalWrite(SLAVE_EN, LOW);
 
-  if (Serial.available() > 0) {
-    data = Serial.readStringUntil('\n');
+  if (RS485Serial.available() > 0) {
+    data = RS485Serial.readStringUntil('\n');
 
     //received disarm command ("d")
     if (data == "d") {
@@ -205,7 +209,7 @@ void loop() {
         digitalWrite(SLAVE_EN, LOW);
         //delay(100);
 
-        if (Serial.available() > 0) {
+        if (RS485Serial.available() > 0) {
           data = "L90R90A90";
         }
       }   
