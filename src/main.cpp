@@ -1,7 +1,6 @@
 #include <Servo.h>
 #include <Arduino.h>
 #include <Adafruit_BMP280.h>
-#include <SoftwareSerial.h>
 #include <Wire.h>
 
 //RS485 communication enable pin (HIGH for transmitting, LOW for receiving)
@@ -34,8 +33,6 @@
 //BMP280 object
 Adafruit_BMP280 bmp280;
 
-SoftwareSerial RS485Serial(AdditionalSensor1, AdditionalSensor3); // RX, TX
-
 //Servo objects
 Servo MotorL, MotorR, MotorA;
 
@@ -48,6 +45,8 @@ float BAT1Svoltage, BAT2Svoltage;
 
 //Motherboard PCB temperature
 float droneTemperature;
+
+bool connectionFlag = false;
 
 //Function for decoding the required motor speeds from the message sent by the controller 
 void decode_motor_speeds(const String& input, int& SpeedL, int& SpeedR, int& SpeedA) {
@@ -108,8 +107,8 @@ void send_measurement_data() {
     //Sending data via RS485
     digitalWrite(SLAVE_EN, HIGH);
     delay(100);
-    RS485Serial.println(data);
-    RS485Serial.flush();
+    Serial.println(data);
+    Serial.flush();
     digitalWrite(SLAVE_EN, LOW);
     delay(100);
 }
@@ -151,7 +150,7 @@ void setup() {
   digitalWrite(LED_RED, HIGH);
 
   //Set baud rate for serial communication
-  RS485Serial.begin(9600);
+  Serial.begin(9600);
 
   
   //Wait once for initialization ESCs
@@ -161,6 +160,40 @@ void setup() {
   if (!bmp280.begin(BMP280_ADDRESS_ALT)) { //If the sensor is not connected, try to change argument to "BMP280_ADDRESS"
       droneTemperature = -50; //If initialization fails, set the temperature to -50
       return;
+  }
+
+  while (!connectionFlag) {
+    // Sprawdź, czy są dostępne dane w buforze Serial
+    digitalWrite(SLAVE_EN, LOW);
+    if (Serial.available() > 0) {
+      // Odczytaj wiadomość od pilota
+      char receivedChar = Serial.read();      // Sprawdź, czy wiadomość to "REQ"
+      if (receivedChar == 'Q') {
+          for(uint8_t i = 0; i < 20; i++) {
+            // Wyślij odpowiedź "ACK" do pilota
+            digitalWrite(SLAVE_EN, HIGH); // Włącz tryb nadawania
+            Serial.println('C');
+            Serial.flush();
+            digitalWrite(SLAVE_EN, LOW); // Wyłącz tryb nadawania
+          }
+          // Ustaw flagę połączenia na true
+          connectionFlag = true;
+      }
+    }
+    if(connectionFlag == true){
+      digitalWrite(SLAVE_EN, HIGH);
+      // Send the measurement data to the remote
+      
+      for(uint8_t i = 0; i < 20; i++) {
+        //Measure battery voltage
+        measure_battery_voltage();
+        //Measure temperature
+        measure_temperature();
+        // Send the measurement data to the remote
+        send_measurement_data();
+      }
+      digitalWrite(SLAVE_EN, LOW);
+    }
   }
 }
 
@@ -172,7 +205,7 @@ void loop() {
 
   //Disconnect if not connected to remote for long enough:
   int loop_counter = 0;
-  while (!(RS485Serial.available() > 0)) {
+  while (!(Serial.available() > 0)) {
     
   loop_counter++;
 
@@ -188,8 +221,8 @@ void loop() {
   String data;
   digitalWrite(SLAVE_EN, LOW);
 
-  if (RS485Serial.available() > 0) {
-    data = RS485Serial.readStringUntil('\n');
+  if (Serial.available() > 0) {
+    data = Serial.readStringUntil('\n'); // Read the incoming data until a newline character
 
     //received disarm command ("d")
     if (data == "d") {
@@ -202,6 +235,7 @@ void loop() {
       //Enter a while loop while the drone is disarmed
       while (data == "d") {
 
+        digitalWrite(SLAVE_EN, HIGH);
         //Send the measurement data to the remote
         send_measurement_data();
 
@@ -209,7 +243,7 @@ void loop() {
         digitalWrite(SLAVE_EN, LOW);
         //delay(100);
 
-        if (RS485Serial.available() > 0) {
+        if (Serial.available() > 0) {
           data = "L90R90A90";
         }
       }   
@@ -219,10 +253,11 @@ void loop() {
   //Decode the motor speeds from the received data
   decode_motor_speeds(data, SpeedL, SpeedR, SpeedA);
 
+  Serial.println(data);
   //Invert motors directions
   SpeedR = 180 - SpeedR;
   // SpeedA = 180 - SpeedA;
-  // SpeedL = 180 - SpeedL;
+  SpeedL = 180 - SpeedL;
 
   //Write the motor speeds to the motors
   MotorL.write(SpeedL);
