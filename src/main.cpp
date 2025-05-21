@@ -30,9 +30,6 @@
 #define ARMED HIGH
 #define DISARMED LOW
 
-//BMP280 object
-Adafruit_BMP280 bmp280;
-
 //Servo objects
 Servo MotorL, MotorR, MotorA;
 
@@ -41,12 +38,15 @@ int SpeedL, SpeedR, SpeedA;
 
 //Battery voltage variables
 int BAT1Sraw, BAT2Sraw;
-float BAT1Svoltage, BAT2Svoltage;
-
-//Motherboard PCB temperature
-float droneTemperature;
+float BAT1Svoltage, BAT2Svoltage, DroneTotalVoltage;
 
 bool connectionFlag = false;
+
+long lastMeasurementTime = 0; // Variable to store the last measurement time
+long currentMeasurementTime = 100; // Variable to store the current time
+long measurementInterval = 60000; // Interval between measurements in milliseconds
+uint16_t measurementDelay = 10000;
+
 
 //Function for decoding the required motor speeds from the message sent by the controller 
 void decode_motor_speeds(const String& input, int& SpeedL, int& SpeedR, int& SpeedA) {
@@ -91,18 +91,15 @@ void measure_battery_voltage() {
     //Voltage calculation from raw values
     BAT1Svoltage = (BAT1Sraw / 1023.0) * 4.9;   // 1S
     BAT2Svoltage = (BAT2Sraw / 1023.0) * 4.9;   // 2S
-}
 
-void measure_temperature() {
-  //Temperature read from BMP280
-  droneTemperature = bmp280.readTemperature();
+    //Total voltage calculation
+    DroneTotalVoltage = BAT1Svoltage + BAT2Svoltage;
 }
 
 void send_measurement_data() {
     //Prepare data to send
-    String data = "BAT1S" + String(BAT1Svoltage, 2) +
-                  "BAT2S" + String(BAT2Svoltage, 2) +
-                  "TEMP" + String(droneTemperature, 2);
+    String data = "BAT1S" + String(BAT1Svoltage, 2) + "," +
+                  "BAT2S" + String(BAT2Svoltage, 2);
 
     //Sending data via RS485
     digitalWrite(SLAVE_EN, HIGH);
@@ -156,12 +153,6 @@ void setup() {
   //Wait once for initialization ESCs
   delay(7000);
 
-  //Initialize BMP280 sensor
-  if (!bmp280.begin(BMP280_ADDRESS_ALT)) { //If the sensor is not connected, try to change argument to "BMP280_ADDRESS"
-      droneTemperature = -50; //If initialization fails, set the temperature to -50
-      return;
-  }
-
   while (!connectionFlag) {
     // Sprawdź, czy są dostępne dane w buforze Serial
     digitalWrite(SLAVE_EN, LOW);
@@ -187,8 +178,6 @@ void setup() {
       for(uint8_t i = 0; i < 20; i++) {
         //Measure battery voltage
         measure_battery_voltage();
-        //Measure temperature
-        measure_temperature();
         // Send the measurement data to the remote
         send_measurement_data();
       }
@@ -200,9 +189,6 @@ void setup() {
 void loop() {
   //Measure battery voltage
   measure_battery_voltage();
-  //Measure temperature
-  measure_temperature();
-
   //Disconnect if not connected to remote for long enough:
   int loop_counter = 0;
   while (!(Serial.available() > 0)) {
@@ -254,12 +240,19 @@ void loop() {
   decode_motor_speeds(data, SpeedL, SpeedR, SpeedA);
 
   Serial.println(data);
-  //Invert motors directions
-  SpeedR = 180 - SpeedR;
-  // SpeedA = 180 - SpeedA;
-  SpeedL = 180 - SpeedL;
 
+
+  currentMeasurementTime = millis(); // Get the current time
   //Write the motor speeds to the motors
+  if(currentMeasurementTime - lastMeasurementTime > measurementInterval && DroneTotalVoltage > 6.3) {
+    MotorL.write(90);
+    MotorR.write(90);
+    MotorA.write(90);
+    delay(measurementDelay);
+    lastMeasurementTime = currentMeasurementTime;
+    measure_battery_voltage();
+  }
+
   MotorL.write(SpeedL);
   MotorR.write(SpeedR);
   MotorA.write(SpeedA);
