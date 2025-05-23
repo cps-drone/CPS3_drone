@@ -44,8 +44,8 @@ bool connectionFlag = false;
 
 long lastMeasurementTime = 0; // Variable to store the last measurement time
 long currentMeasurementTime = 100; // Variable to store the current time
-long measurementInterval = 60000; // Interval between measurements in milliseconds
-uint16_t measurementDelay = 10000;
+long measurementInterval = 600000; // Interval between measurements in milliseconds
+long measurementDelay = 10000;
 
 
 //Function for decoding the required motor speeds from the message sent by the controller 
@@ -99,7 +99,7 @@ void measure_battery_voltage() {
 void send_measurement_data() {
     //Prepare data to send
     String data = "BAT1S" + String(BAT1Svoltage, 2) + "," +
-                  "BAT2S" + String(BAT2Svoltage, 2);
+                  "BAT2S" + String(BAT2Svoltage, 2) + ",";
 
     //Sending data via RS485
     digitalWrite(SLAVE_EN, HIGH);
@@ -244,13 +244,16 @@ void loop() {
 
   currentMeasurementTime = millis(); // Get the current time
   //Write the motor speeds to the motors
-  if(currentMeasurementTime - lastMeasurementTime > measurementInterval && DroneTotalVoltage > 6.3) {
+  if(currentMeasurementTime - lastMeasurementTime > measurementInterval) {
     MotorL.write(90);
     MotorR.write(90);
     MotorA.write(90);
     delay(measurementDelay);
     lastMeasurementTime = currentMeasurementTime;
     measure_battery_voltage();
+    while(DroneTotalVoltage < 7.5){
+      measure_battery_voltage();
+    }
   }
 
   MotorL.write(SpeedL);
