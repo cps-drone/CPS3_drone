@@ -1,6 +1,5 @@
 #include <Servo.h>
 #include <Arduino.h>
-#include <Adafruit_BMP280.h>
 #include <Wire.h>
 
 //RS485 communication enable pin (HIGH for transmitting, LOW for receiving)
@@ -30,9 +29,6 @@
 #define ARMED HIGH
 #define DISARMED LOW
 
-//BMP280 object
-Adafruit_BMP280 bmp280;
-
 //Servo objects
 Servo MotorL, MotorR, MotorA;
 
@@ -42,9 +38,6 @@ int SpeedL, SpeedR, SpeedA;
 //Battery voltage variables
 int BAT1Sraw, BAT2Sraw;
 float BAT1Svoltage, BAT2Svoltage;
-
-//Motherboard PCB temperature
-float droneTemperature;
 
 bool connectionFlag = false;
 
@@ -93,16 +86,11 @@ void measure_battery_voltage() {
     BAT2Svoltage = (BAT2Sraw / 1023.0) * 4.9;   // 2S
 }
 
-void measure_temperature() {
-  //Temperature read from BMP280
-  droneTemperature = bmp280.readTemperature();
-}
 
 void send_measurement_data() {
     //Prepare data to send
-    String data = "BAT1S" + String(BAT1Svoltage, 2) +
-                  "BAT2S" + String(BAT2Svoltage, 2) +
-                  "TEMP" + String(droneTemperature, 2);
+    String data = "BAT1S" + String(BAT1Svoltage, 2) + "," +
+                  "BAT2S" + String(BAT2Svoltage, 2) + ",";
 
     //Sending data via RS485
     digitalWrite(SLAVE_EN, HIGH);
@@ -156,12 +144,6 @@ void setup() {
   //Wait once for initialization ESCs
   delay(7000);
 
-  //Initialize BMP280 sensor
-  if (!bmp280.begin(BMP280_ADDRESS_ALT)) { //If the sensor is not connected, try to change argument to "BMP280_ADDRESS"
-      droneTemperature = -50; //If initialization fails, set the temperature to -50
-      return;
-  }
-
   while (!connectionFlag) {
     // Sprawdź, czy są dostępne dane w buforze Serial
     digitalWrite(SLAVE_EN, LOW);
@@ -187,8 +169,6 @@ void setup() {
       for(uint8_t i = 0; i < 20; i++) {
         //Measure battery voltage
         measure_battery_voltage();
-        //Measure temperature
-        measure_temperature();
         // Send the measurement data to the remote
         send_measurement_data();
       }
@@ -200,8 +180,6 @@ void setup() {
 void loop() {
   //Measure battery voltage
   measure_battery_voltage();
-  //Measure temperature
-  measure_temperature();
 
   //Disconnect if not connected to remote for long enough:
   int loop_counter = 0;
@@ -254,10 +232,6 @@ void loop() {
   decode_motor_speeds(data, SpeedL, SpeedR, SpeedA);
 
   Serial.println(data);
-  //Invert motors directions
-  SpeedR = 180 - SpeedR;
-  // SpeedA = 180 - SpeedA;
-  SpeedL = 180 - SpeedL;
 
   //Write the motor speeds to the motors
   MotorL.write(SpeedL);
