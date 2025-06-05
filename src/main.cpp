@@ -143,38 +143,6 @@ void setup() {
   
   //Wait once for initialization ESCs
   delay(7000);
-
-  // while (!connectionFlag) {
-  //   // Sprawdź, czy są dostępne dane w buforze Serial
-  //   digitalWrite(SLAVE_EN, LOW);
-  //   if (Serial.available() > 0) {
-  //     // Odczytaj wiadomość od pilota
-  //     char receivedChar = Serial.read();      // Sprawdź, czy wiadomość to "REQ"
-  //     if (receivedChar == 'Q') {
-  //         for(uint8_t i = 0; i < 20; i++) {
-  //           // Wyślij odpowiedź "ACK" do pilota
-  //           digitalWrite(SLAVE_EN, HIGH); // Włącz tryb nadawania
-  //           Serial.println('C');
-  //           Serial.flush();
-  //           digitalWrite(SLAVE_EN, LOW); // Wyłącz tryb nadawania
-  //         }
-  //         // Ustaw flagę połączenia na true
-  //         connectionFlag = true;
-  //     }
-  //   }
-  //   if(connectionFlag == true){
-  //     digitalWrite(SLAVE_EN, HIGH);
-  //     // Send the measurement data to the remote
-      
-  //     for(uint8_t i = 0; i < 20; i++) {
-  //       //Measure battery voltage
-  //       measure_battery_voltage();
-  //       // Send the measurement data to the remote
-  //       send_measurement_data();
-  //     }
-  //     digitalWrite(SLAVE_EN, LOW);
-  //   }
-  // }
 }
 
 void loop() {
