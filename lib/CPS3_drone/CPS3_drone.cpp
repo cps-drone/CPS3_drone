@@ -29,12 +29,11 @@ void CPS3_drone_init(cps3_drone_t *CPS3){
     CPS3->MotorL.motor.write(CPS3->MotorL.speed);
     CPS3->MotorR.motor.write(CPS3->MotorR.speed);
     CPS3->MotorA.motor.write(CPS3->MotorA.speed);
+    CPS3->LEDs_state = false; // LEDs off by default
 
     // Initialize battery measurements with 0
-    CPS3->Battery.raw_value_1S = 0;
-    CPS3->Battery.raw_value_2S = 0;
-    CPS3->Battery.voltage_1S = 0.0f;
-    CPS3->Battery.voltage_2S = 0.0f;
+    CPS3->Battery.raw_value = 0;
+    CPS3->Battery.voltage = 0.0f;
     // Set master mode flag and set the massages as empty
     CPS3->Data.master_mode = true;          // Default to master mode
     CPS3->Data.message_for_transmit = "";   // Set the transmit message as empty
@@ -44,9 +43,11 @@ void CPS3_drone_init(cps3_drone_t *CPS3){
     pinMode(SLAVE_EN, OUTPUT);
     set_CPS3_transmission_mode(CPS3, DRONE_TRANSMISSION_MASTER);
 
+    pinMode(LED_PIN, OUTPUT); // Set LED pin as output
+    digitalWrite(LED_PIN, LOW); // Ensure LEDs are off at startup
+
     //Set the battery sensors as inputs
-    pinMode(BAT1S, INPUT);
-    pinMode(BAT2S, INPUT);
+    pinMode(BAT, INPUT);
 
     //Set baud rate for serial communication
     Serial.begin(9600);
@@ -59,24 +60,31 @@ void CPS3_drone_init(cps3_drone_t *CPS3){
     CPS3->Data.no_massage_timer_previous_time = 0;
 }
 
+void set_LEDs_state(cps3_drone_t *CPS3) {
+    if (CPS3->LEDs_state) {
+        digitalWrite(LED_PIN, HIGH); // Turn on LEDs
+    } else {
+        digitalWrite(LED_PIN, LOW);  // Turn off LEDs
+    }
+}
+
+
 /*
-    * Function measures the battery cells raw voltages,
-    * and calculates the correct battery cells voltages.
+    * Function measures the battery raw voltage,
+    * and calculates the correct battery voltage.
 */
-void get_battery_voltages(cps3_drone_t *CPS3){
+void get_battery_voltage(cps3_drone_t *CPS3){
     // Read raw values from ADC
-    CPS3->Battery.raw_value_1S = analogRead(BAT1S); // Measure raw value of 1S battery
-    CPS3->Battery.raw_value_2S = analogRead(BAT2S); // Measure raw value of 2S battery
+    CPS3->Battery.raw_value = analogRead(BAT); // Measure raw value of the battery voltage
     // Calculate voltages from raw values
-    CPS3->Battery.voltage_1S = (CPS3->Battery.raw_value_1S / 1023.0) * 4.9;   // Calculate 1S voltage
-    CPS3->Battery.voltage_2S = (CPS3->Battery.raw_value_2S / 1023.0) * 4.9;   // Calculate 2S voltage
+    CPS3->Battery.voltage = (CPS3->Battery.raw_value / 1023.0) * 4.9 * 2;   // Calculate battery voltage
 }
 
 /*
     * Fuction reads data from the remote. It decodes the data,
     * sets motors speed, and sets the Master mode flag as MASTER.
 */
-void get_motor_speeds(cps3_drone_t *CPS3){
+void get_steering(cps3_drone_t *CPS3, gripper_t *gripper){
 
     if (Serial.available() > 0 && CPS3->Data.master_mode == DRONE_TRANSMISSION_SLAVE) {
 
@@ -131,6 +139,34 @@ void get_motor_speeds(cps3_drone_t *CPS3){
             CPS3->Data.no_massage_timer_previous_time = CPS3->Data.no_massage_timer_current_time;
         }
 
+        // LEDs state flag
+        int l_idx = CPS3->Data.message_received.indexOf('l');
+        if (l_idx != -1) {
+            String l_str = CPS3->Data.message_received.substring(l_idx + 1);
+            for (size_t i = 0; i < l_str.length(); ++i) {
+                if (!isDigit(l_str.charAt(i))) {
+                    l_str = l_str.substring(0, i);
+                    break;
+                }
+            }
+            CPS3->LEDs_state = l_str.toInt();
+        }
+
+
+        // gripper steering
+        int G_idx = CPS3->Data.message_received.indexOf('G');
+        if (G_idx != -1) {
+            String G_str = CPS3->Data.message_received.substring(G_idx + 1);
+            for (size_t i = 0; i < G_str.length(); ++i) {
+                if (!isDigit(G_str.charAt(i))) {
+                    G_str = G_str.substring(0, i);
+                    break;
+                }
+            }
+            gripper->command = G_str.toInt();
+            gripper_move(gripper);
+        }
+
         // write motor speeds to the motor Servo objects
         CPS3->MotorL.motor.write(CPS3->MotorL.speed);
         CPS3->MotorR.motor.write(CPS3->MotorR.speed);
@@ -143,13 +179,13 @@ void get_motor_speeds(cps3_drone_t *CPS3){
     else if(!Serial.available() && (CPS3->Data.no_massage_timer_current_time - CPS3->Data.no_massage_timer_previous_time >= NO_MASSAGE_INTERVAL)){
         set_CPS3_transmission_mode(CPS3, DRONE_TRANSMISSION_MASTER);
         CPS3->Data.no_massage_timer_previous_time = CPS3->Data.no_massage_timer_current_time;
-        get_battery_voltages(CPS3);
+        get_battery_voltage(CPS3);
         send_measurement_data(CPS3);
     }
 }
 
 /*
-    * Function sends measured 1S and 2S voltages to the remote.
+    * Function sends measured battery voltage to the remote.
     * After the message is sent it sets master mode as SLAVE.
 */
 void send_measurement_data(cps3_drone_t *CPS3){
@@ -157,8 +193,7 @@ void send_measurement_data(cps3_drone_t *CPS3){
     if(CPS3->Data.master_mode == DRONE_TRANSMISSION_MASTER){
         CPS3->Data.master_mode = DRONE_TRANSMISSION_SLAVE;
         CPS3->Data.message_for_transmit =   
-                "O" + String(CPS3->Battery.voltage_1S, 2) + "," +   // O like battery cell One
-                "T" + String(CPS3->Battery.voltage_2S, 2) + "," +   // T like battery cell Two
+                "V" + String(CPS3->Battery.voltage, 2) + "," +   // V like battery voltage
                 "M" + String(CPS3->Data.master_mode) + ",";         // M like Master mode
                 
         Serial.println(CPS3->Data.message_for_transmit);

@@ -5,6 +5,7 @@
 #include <Wire.h>
 #include <Arduino.h>
 #include "Definitions.h"
+#include "Gripper.h"
 #include <EEPROM.h>
 #define EEPROM_MODE_ADDR 0
 
@@ -28,10 +29,8 @@ typedef struct motor_s{
     * The voltage is calculated based on the ADC resolution (1024 bits) and reference voltage (~4.9V).
 */
 typedef struct battery_s{
-    int raw_value_1S; // Raw value of 1S battery
-    int raw_value_2S; // Raw value of 2S battery
-    float voltage_1S; // Voltage of 1S battery
-    float voltage_2S; // Voltage of 2S battery
+    int raw_value; // Raw value of 2S battery
+    float voltage; // Voltage of 2S battery
 } battery_t;
 
 /*
@@ -59,7 +58,7 @@ typedef struct cps3_drone_s{
     motor_t MotorA; // Vertical motor
     battery_t Battery; // Battery measurements
     data_t Data;
-
+    bool LEDs_state; // State of the LEDs (on/off)
 } cps3_drone_t;
 
 /*
@@ -79,16 +78,22 @@ void set_CPS3_transmission_mode(cps3_drone_t *CPS3, bool transmission_mode);
 void CPS3_drone_init(cps3_drone_t *CPS3);
 
 /*
+    * Function sets the state of the LEDs based on the received message from the remote.
+    * If the message contains 'l1', it turns on the LEDs, and if it contains 'l0', it turns off the LEDs.
+*/
+void set_LEDs_state(cps3_drone_t *CPS3);
+
+/*
     * Fuction reads data from the remote. It decodes the data,
     * sets motors speed, and sets the Master mode flag as MASTER.
 */
-void get_motor_speeds(cps3_drone_t *CPS3);
+void get_steering(cps3_drone_t *CPS3, gripper_t *gripper);
 
 /*
     * Function measures the battery cells raw voltages,
     * and calculates the correct battery cells voltages.
 */
-void get_battery_voltages(cps3_drone_t *CPS3);
+void get_battery_voltage(cps3_drone_t *CPS3);
 
 /*
     * Function sends measured 1S and 2S voltages to the remote.

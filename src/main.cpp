@@ -1,12 +1,16 @@
 #include "Definitions.h"
 #include "CPS3_drone.h"
+#include "Gripper.h"
 
 // CPS3 drone struct object instance
 cps3_drone_t CPS3;
+gripper_t gripper;
 
 void setup() {
   // Initialize the CPS3 struct object instance
   CPS3_drone_init(&CPS3);
+
+  gripper_init(&gripper);
 }
 
 /*
@@ -25,7 +29,8 @@ void loop() {
     * is turned off by mistake during swimming.
   */ 
   CPS3.Data.no_massage_timer_current_time = millis();
-  get_motor_speeds(&CPS3);
-  get_battery_voltages(&CPS3);
+  get_steering(&CPS3, &gripper);
+  get_battery_voltage(&CPS3);
+  set_LEDs_state(&CPS3);
   send_measurement_data(&CPS3);
 }

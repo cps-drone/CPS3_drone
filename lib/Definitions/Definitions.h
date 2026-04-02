@@ -10,12 +10,11 @@
 #define MOTOR_A_PIN 3
 
 //Battery cells voltage measurement
-#define BAT1S A0
-#define BAT2S A1
+#define BAT A1
 
 //Additional sensors
-#define AdditionalSensor1 A2
-#define AdditionalSensor2 A3
+#define LED_PIN A4
+// #define AdditionalSensor2 A3 <- reserved for gripper
 #define AdditionalSensor3 A5
 #define AdditionalSensor4 A6
 
@@ -29,5 +28,8 @@
 
 //Timer for no message received
 #define NO_MASSAGE_INTERVAL 2000
+
+//Gripper pin definition
+#define GRIPPER_PIN A3
 
 #endif // DEFINITIONS_H
