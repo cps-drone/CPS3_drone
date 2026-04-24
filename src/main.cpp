@@ -23,14 +23,7 @@ void setup() {
   * it sends the battery measurements data to the remote (waiting for feedback).
 */
 void loop() {
-  /*
-    * Updating the timer to avoid,
-    * case "lost message" for example when the remote,
-    * is turned off by mistake during swimming.
-  */ 
-  CPS3.Data.no_massage_timer_current_time = millis();
-  get_steering(&CPS3, &gripper);
   get_battery_voltage(&CPS3);
   set_LEDs_state(&CPS3);
-  send_measurement_data(&CPS3);
+  get_steering(&CPS3, &gripper);
 }

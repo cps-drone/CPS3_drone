@@ -24,13 +24,12 @@ typedef struct motor_s{
 
 /*    
     * Battery structure
-    * Contains raw values for 1S and 2S batteries and their corresponding voltages.
-    * The raw values are read from the analog pins and converted to voltage.
+    * The raw value is read from the analog pins and converted to voltage.
     * The voltage is calculated based on the ADC resolution (1024 bits) and reference voltage (~4.9V).
 */
 typedef struct battery_s{
-    int raw_value; // Raw value of 2S battery
-    float voltage; // Voltage of 2S battery
+    int raw_value;
+    float voltage;
 } battery_t;
 
 /*
@@ -41,9 +40,6 @@ typedef struct battery_s{
 typedef struct data_s{
     String message_for_transmit; // String for data to transmit
     String message_received; // String for data received from remote
-    bool master_mode; // Flag indicating if the drone is in master mode
-    long no_massage_timer_current_time;
-    long no_massage_timer_previous_time;
 } data_t;
 
 /* 
@@ -60,13 +56,6 @@ typedef struct cps3_drone_s{
     data_t Data;
     bool LEDs_state; // State of the LEDs (on/off)
 } cps3_drone_t;
-
-/*
-    * Function sets transmission mode to the mode,
-    * described by passed to function parameter "transmission_mode".
-    * Fuction contains small 50 miliseconds delay after modes switch.
-*/
-void set_CPS3_transmission_mode(cps3_drone_t *CPS3, bool transmission_mode);
 
 /*
     * Fuction initialises all of the drone variables with 0 (for int/float),

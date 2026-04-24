@@ -1,16 +1,6 @@
 #include "CPS3_drone.h"
 
 /*
-    * Function sets transmission mode to the mode,
-    * described by passed to function parameter "transmission_mode".
-    * Fuction contains small 50 miliseconds delay after modes switch.
-*/
-void set_CPS3_transmission_mode(cps3_drone_t *CPS3, bool transmission_mode){
-    CPS3->Data.master_mode = transmission_mode;
-    digitalWrite(SLAVE_EN, CPS3->Data.master_mode);
-}
-
-/*
     * Fuction initialises all of the drone variables with 0 (for int/float),
     * with 90 (for motors speed), with empty string (for Strings).
     * It also attaches the proper Arduino pins to the motors, and sets
@@ -35,13 +25,10 @@ void CPS3_drone_init(cps3_drone_t *CPS3){
     CPS3->Battery.raw_value = 0;
     CPS3->Battery.voltage = 0.0f;
     // Set master mode flag and set the massages as empty
-    CPS3->Data.master_mode = true;          // Default to master mode
     CPS3->Data.message_for_transmit = "";   // Set the transmit message as empty
     CPS3->Data.message_received = "";       // Set the received message as empty
 
-    // Master mode pin as output
-    pinMode(SLAVE_EN, OUTPUT);
-    set_CPS3_transmission_mode(CPS3, DRONE_TRANSMISSION_MASTER);
+    pinMode(SLAVE_EN, OUTPUT); // Master mode pin as output
 
     pinMode(LED_PIN, OUTPUT); // Set LED pin as output
     digitalWrite(LED_PIN, LOW); // Ensure LEDs are off at startup
@@ -50,14 +37,10 @@ void CPS3_drone_init(cps3_drone_t *CPS3){
     pinMode(BAT, INPUT);
 
     //Set baud rate for serial communication
-    Serial.begin(9600);
+    Serial.begin(115200);
 
     //Wait once for initialization ESCs
     delay(7000);
-
-    //Timer variables init
-    CPS3->Data.no_massage_timer_current_time = 0;
-    CPS3->Data.no_massage_timer_previous_time = 0;
 }
 
 void set_LEDs_state(cps3_drone_t *CPS3) {
@@ -67,7 +50,6 @@ void set_LEDs_state(cps3_drone_t *CPS3) {
         digitalWrite(LED_PIN, LOW);  // Turn off LEDs
     }
 }
-
 
 /*
     * Function measures the battery raw voltage,
@@ -84,120 +66,115 @@ void get_battery_voltage(cps3_drone_t *CPS3){
     * Fuction reads data from the remote. It decodes the data,
     * sets motors speed, and sets the Master mode flag as MASTER.
 */
-void get_steering(cps3_drone_t *CPS3, gripper_t *gripper){
+void get_steering(cps3_drone_t *CPS3, gripper_t *gripper) {
+    digitalWrite(SLAVE_EN, LOW); // Set master mode
+    delay(10);
 
-    if (Serial.available() > 0 && CPS3->Data.master_mode == DRONE_TRANSMISSION_SLAVE) {
+    char buffer[23]; // Buffer to store the incoming message
+    int index = 0;   // Index to track the position in the buffer
+    unsigned long startTime = millis(); // Start the timer for timeout
 
-        set_CPS3_transmission_mode(CPS3, DRONE_TRANSMISSION_SLAVE);
-
-        CPS3->Data.message_received = Serial.readStringUntil('\n');
-
-        // speed for the left motor
-        int L_idx = CPS3->Data.message_received.indexOf('L');
-        if (L_idx != -1) {
-            CPS3->MotorL.speed = CPS3->Data.message_received.substring(L_idx + 1).toInt();
-        }
-
-        // speed for the right motor
-        int R_idx = CPS3->Data.message_received.indexOf('R');
-        if (R_idx != -1) {
-            String R_str = CPS3->Data.message_received.substring(R_idx + 1);
-            for (size_t i = 0; i < R_str.length(); ++i) {
-                if (!isDigit(R_str.charAt(i))) {
-                    R_str = R_str.substring(0, i);
-                    break;
-                }
+    // Read incoming data with a timeout of 20 ms
+    while (millis() - startTime < 20) {
+        if (Serial.available() > 0) {
+            char incomingByte = Serial.read(); // Read one byte from the serial buffer
+            if (index < sizeof(buffer) - 1) {  // Ensure buffer does not overflow
+                buffer[index++] = incomingByte;
             }
-            CPS3->MotorR.speed = R_str.toInt();
-        }
-
-        // speed for the vertical motor
-        int A_idx = CPS3->Data.message_received.indexOf('A');
-        if (A_idx != -1) {
-            String A_str = CPS3->Data.message_received.substring(A_idx + 1);
-            for (size_t i = 0; i < A_str.length(); ++i) {
-                if (!isDigit(A_str.charAt(i))) {
-                    A_str = A_str.substring(0, i);
-                    break;
-                }
+            if (incomingByte == 'E') { // Stop reading if the message ends with 'E'
+                break;
             }
-            CPS3->MotorA.speed = A_str.toInt();
         }
-
-        // master mode transmission flag
-        int M_idx = CPS3->Data.message_received.indexOf('M');
-        if (M_idx != -1) {
-            String M_str = CPS3->Data.message_received.substring(M_idx + 1);
-            for (size_t i = 0; i < M_str.length(); ++i) {
-                if (!isDigit(M_str.charAt(i))) {
-                    M_str = M_str.substring(0, i);
-                    break;
-                }
-            }
-            set_CPS3_transmission_mode(CPS3, M_str.toInt());
-
-            CPS3->Data.no_massage_timer_previous_time = CPS3->Data.no_massage_timer_current_time;
-        }
-
-        // LEDs state flag
-        int l_idx = CPS3->Data.message_received.indexOf('l');
-        if (l_idx != -1) {
-            String l_str = CPS3->Data.message_received.substring(l_idx + 1);
-            for (size_t i = 0; i < l_str.length(); ++i) {
-                if (!isDigit(l_str.charAt(i))) {
-                    l_str = l_str.substring(0, i);
-                    break;
-                }
-            }
-            CPS3->LEDs_state = l_str.toInt();
-        }
-
-
-        // gripper steering
-        int G_idx = CPS3->Data.message_received.indexOf('G');
-        if (G_idx != -1) {
-            String G_str = CPS3->Data.message_received.substring(G_idx + 1);
-            for (size_t i = 0; i < G_str.length(); ++i) {
-                if (!isDigit(G_str.charAt(i))) {
-                    G_str = G_str.substring(0, i);
-                    break;
-                }
-            }
-            gripper->command = G_str.toInt();
-            gripper_move(gripper);
-        }
-
-        // write motor speeds to the motor Servo objects
-        CPS3->MotorL.motor.write(CPS3->MotorL.speed);
-        CPS3->MotorR.motor.write(CPS3->MotorR.speed);
-        CPS3->MotorA.motor.write(CPS3->MotorA.speed);
     }
-    /*
-        * Handling the case when there is no received messages from remote.
-        * For example when the remote is turned off by mistake during swimming.
-    */
-    else if(!Serial.available() && (CPS3->Data.no_massage_timer_current_time - CPS3->Data.no_massage_timer_previous_time >= NO_MASSAGE_INTERVAL)){
-        set_CPS3_transmission_mode(CPS3, DRONE_TRANSMISSION_MASTER);
-        CPS3->Data.no_massage_timer_previous_time = CPS3->Data.no_massage_timer_current_time;
-        get_battery_voltage(CPS3);
-        send_measurement_data(CPS3);
+    buffer[index] = '\0'; // Null-terminate the buffer to make it a valid string
+
+    // Process the received message
+    String message = String(buffer);
+    Serial.print("Received message: ");
+    Serial.println(message);
+    // Left motor speed
+    int L_idx = message.indexOf('L');
+    if (L_idx != -1) {
+        CPS3->MotorL.speed = message.substring(L_idx + 1).toInt();
     }
+
+    // Right motor speed
+    int R_idx = message.indexOf('R');
+    if (R_idx != -1) {
+        String R_str = message.substring(R_idx + 1);
+        for (size_t i = 0; i < R_str.length(); ++i) {
+            if (!isDigit(R_str.charAt(i))) {
+                R_str = R_str.substring(0, i);
+                break;
+            }
+        }
+        CPS3->MotorR.speed = R_str.toInt();
+    }
+
+    // Vertical motor speed
+    int A_idx = message.indexOf('A');
+    if (A_idx != -1) {
+        String A_str = message.substring(A_idx + 1);
+        for (size_t i = 0; i < A_str.length(); ++i) {
+            if (!isDigit(A_str.charAt(i))) {
+                A_str = A_str.substring(0, i);
+                break;
+            }
+        }
+        CPS3->MotorA.speed = A_str.toInt();
+    }
+
+    // LEDs state
+    int l_idx = message.indexOf('D');
+    if (l_idx != -1) {
+        String l_str = message.substring(l_idx + 1);
+        for (size_t i = 0; i < l_str.length(); ++i) {
+            if (!isDigit(l_str.charAt(i))) {
+                l_str = l_str.substring(0, i);
+                break;
+            }
+        }
+        CPS3->LEDs_state = l_str.toInt();
+    }
+
+    // Gripper steering
+    int G_idx = message.indexOf('G');
+    if (G_idx != -1) {
+        String G_str = message.substring(G_idx + 1);
+        for (size_t i = 0; i < G_str.length(); ++i) {
+            if (!isDigit(G_str.charAt(i))) {
+                G_str = G_str.substring(0, i);
+                break;
+            }
+        }
+        gripper->command = G_str.toInt();
+        gripper_move(gripper);
+    }
+
+    // Write motor speeds to the motor Servo objects
+    CPS3->MotorL.motor.write(CPS3->MotorL.speed);
+    CPS3->MotorR.motor.write(CPS3->MotorR.speed);
+    CPS3->MotorA.motor.write(CPS3->MotorA.speed);
+
+    digitalWrite(SLAVE_EN, HIGH); // Set master mode
+    send_measurement_data(CPS3);
 }
 
 /*
     * Function sends measured battery voltage to the remote.
     * After the message is sent it sets master mode as SLAVE.
 */
-void send_measurement_data(cps3_drone_t *CPS3){
+void send_measurement_data(cps3_drone_t *CPS3) {
+    digitalWrite(SLAVE_EN, HIGH); // Set RS485 to transmission mode
+    delay(10); // Ensure the mode is switched before sending the message
 
-    if(CPS3->Data.master_mode == DRONE_TRANSMISSION_MASTER){
-        CPS3->Data.master_mode = DRONE_TRANSMISSION_SLAVE;
-        CPS3->Data.message_for_transmit =   
-                "V" + String(CPS3->Battery.voltage, 2) + "," +   // V like battery voltage
-                "M" + String(CPS3->Data.master_mode) + ",";         // M like Master mode
-                
-        Serial.println(CPS3->Data.message_for_transmit);
-        Serial.flush();
-        set_CPS3_transmission_mode(CPS3, CPS3->Data.master_mode);
-    }
+    // Format the message as a String
+    String send_message = "V" + String(CPS3->Battery.voltage, 2) + "E"; // Format voltage with 2 decimal places
+
+    // Send the message
+    Serial.print(send_message); // Send the formatted String
+    Serial.flush(); // Ensure the message is fully transmitted
+    delay(10); // Wait to ensure the message is sent
+
+    digitalWrite(SLAVE_EN, LOW); // Set RS485 back to receive mode
 }
