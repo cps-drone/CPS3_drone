@@ -18,10 +18,13 @@ void set_CPS3_transmission_mode(cps3_drone_t *CPS3, bool transmission_mode){
     * waiting for the drone votage data measurement)
 */
 void CPS3_drone_init(cps3_drone_t *CPS3){
-    // Initialize motors
-    CPS3->MotorL.motor.attach(MOTOR_L_PIN);
-    CPS3->MotorR.motor.attach(MOTOR_R_PIN);
-    CPS3->MotorA.motor.attach(MOTOR_A_PIN);
+    // Initialize motors with explicit ESC pulse range (1000-2000us).
+    // Default Servo.attach() uses 544-2400us which is the servo range and
+    // can drive ESCs out of their accepted PWM window, causing the ESC to
+    // reset or run at unexpected speeds at stick extremes.
+    CPS3->MotorL.motor.attach(MOTOR_L_PIN, 1000, 2000);
+    CPS3->MotorR.motor.attach(MOTOR_R_PIN, 1000, 2000);
+    CPS3->MotorA.motor.attach(MOTOR_A_PIN, 1000, 2000);
     // Set initial motor speeds to neutral position (90)
     CPS3->MotorL.speed = 90;    // Neutral position for left motor
     CPS3->MotorR.speed = 90;    // Neutral position for right motor
@@ -87,7 +90,14 @@ void get_motor_speeds(cps3_drone_t *CPS3){
         // speed for the left motor
         int L_idx = CPS3->Data.message_received.indexOf('L');
         if (L_idx != -1) {
-            CPS3->MotorL.speed = CPS3->Data.message_received.substring(L_idx + 1).toInt();
+            String L_str = CPS3->Data.message_received.substring(L_idx + 1);
+            for (size_t i = 0; i < L_str.length(); ++i) {
+                if (!isDigit(L_str.charAt(i))) {
+                    L_str = L_str.substring(0, i);
+                    break;
+                }
+            }
+            CPS3->MotorL.speed = constrain(L_str.toInt(), 0, 180);
         }
 
         // speed for the right motor
@@ -100,7 +110,7 @@ void get_motor_speeds(cps3_drone_t *CPS3){
                     break;
                 }
             }
-            CPS3->MotorR.speed = R_str.toInt();
+            CPS3->MotorR.speed = constrain(R_str.toInt(), 0, 180);
         }
 
         // speed for the vertical motor
@@ -113,7 +123,7 @@ void get_motor_speeds(cps3_drone_t *CPS3){
                     break;
                 }
             }
-            CPS3->MotorA.speed = A_str.toInt();
+            CPS3->MotorA.speed = constrain(A_str.toInt(), 0, 180);
         }
 
         // master mode transmission flag
