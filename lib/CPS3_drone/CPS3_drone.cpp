@@ -20,6 +20,8 @@ void CPS3_drone_init(cps3_drone_t *CPS3){
     CPS3->MotorR.motor.write(CPS3->MotorR.speed);
     CPS3->MotorA.motor.write(CPS3->MotorA.speed);
     CPS3->LEDs_state = false; // LEDs off by default
+    CPS3->counterLEDs = 0; // Initialize counter for D1 messages
+    CPS3->counterLEDsOff = 0; // Initialize counter for D0 messages
 
     // Initialize battery measurements with 0
     CPS3->Battery.raw_value = 0;
@@ -134,7 +136,21 @@ void get_steering(cps3_drone_t *CPS3, gripper_t *gripper) {
                 break;
             }
         }
-        CPS3->LEDs_state = l_str.toInt();
+        
+        int led_command = l_str.toInt();
+        if (led_command == 1) {
+            CPS3->counterLEDs++; // Increment counter for D1
+            CPS3->counterLEDsOff = 0; // Reset counter for D0
+            if (CPS3->counterLEDs >= 3) { // Require 3 consecutive D1 messages
+                CPS3->LEDs_state = true; // Turn on LEDs
+            }
+        } else if (led_command == 0) {
+            CPS3->counterLEDsOff++; // Increment counter for D0
+            CPS3->counterLEDs = 0; // Reset counter for D1
+            if (CPS3->counterLEDsOff >= 3) { // Require 3 consecutive D0 messages
+                CPS3->LEDs_state = false; // Turn off LEDs
+            }
+        }
     }
 
     // Gripper steering

@@ -8,6 +8,9 @@
 
 typedef struct gripper_s{
     Servo motor; // Servo object for the gripper
+    int counterOpen;
+    int counterClose;
+
     /*
      *  0 - jaws closing
      *  90 - jaws in neutral position

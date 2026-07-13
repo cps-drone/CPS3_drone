@@ -55,6 +55,8 @@ typedef struct cps3_drone_s{
     battery_t Battery; // Battery measurements
     data_t Data;
     bool LEDs_state; // State of the LEDs (on/off)
+    int counterLEDs;
+    int counterLEDsOff;
 } cps3_drone_t;
 
 /*
